@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>GPA Tracker Pro</title>
+    <style>
+        :root { --primary: #6366f1; --danger: #ef4444; --success: #10b981; --glass: rgba(255, 255, 255, 0.1); }
+        body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; 
+               background: linear-gradient(135deg, #0f172a, #1e293b); font-family: 'Inter', sans-serif; color: white; }
+        .glass-card { background: var(--glass); backdrop-filter: blur(15px); padding: 35px; border-radius: 24px; 
+                      border: 1px solid rgba(255,255,255,0.1); width: 95%; max-width: 550px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); text-align: center; }
+        input { width: 100%; padding: 12px; margin: 5px 0; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: white; box-sizing: border-box; }
+        button { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; margin-top: 15px; }
+        .at-risk { color: var(--danger); font-weight: 800; font-size: 1.2em; }
+        .safe { color: var(--success); font-weight: 800; font-size: 1.2em; }
+        .progress-bg { background: rgba(255,255,255,0.1); height: 10px; border-radius: 5px; margin: 15px 0; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--success); transition: width 0.8s ease; }
+        .history-panel { display: none; margin-top: 20px; background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; text-align: left; max-height: 200px; overflow-y: auto; }
+        .course-row { display: grid; grid-template-columns: 2fr 1fr 1fr 40px; gap: 8px; margin-bottom: 5px; align-items: center; }
+        .nav-link { color: #94a3b8; font-size: 12px; text-decoration: none; display: block; margin-top: 15px; }
+        .add-btn { background: transparent; border: 1px dashed rgba(255,255,255,0.3); color: #94a3b8; padding: 8px; margin-top: 5px; font-size: 12px; }
+        .delete-btn { background: transparent; border: none; color: var(--danger); cursor: pointer; font-size: 20px; font-weight: bold; padding: 0; }
+        .timer-box { background: rgba(239, 68, 68, 0.1); color: var(--danger); padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid var(--danger); }
+    </style>
+</head>
+<body>
+    <div class="glass-card">
+        {% if page == 'start' %}
+            <h1>GPA Tracker</h1>
+            <p style="color: #94a3b8;">Monitor your academic journey with precision.</p>
+            <a href="{{ url_for('login') }}"><button>Login</button></a>
+            <a href="{{ url_for('signup') }}"><button style="background:transparent; border:1px solid var(--glass);">Sign Up</button></a>
+
+        {% elif page == 'signup' or page == 'login' %}
+            <h2>{{ page.title() }}</h2>
+            {% if error %}<p style="color:var(--danger)">{{error}}</p>{% endif %}
+            {% if locked %}
+                <div class="timer-box">Security Lockout: <span id="count-timer">--:--</span></div>
+                <script>
+                    const target = {{ end_time }};
+                    function startTimer() {
+                        const now = Math.floor(Date.now() / 1000);
+                        const diff = target - now;
+                        if (diff <= 0) { window.location.reload(); } 
+                        else {
+                            document.getElementById('count-timer').innerText = `${Math.floor(diff / 60)}m ${Math.floor(diff % 60)}s`;
+                            setTimeout(startTimer, 1000);
+                        }
+                    }
+                    startTimer();
+                </script>
+            {% else %}
+                <form method="POST">
+                    <input name="username" placeholder="Username" required>
+                    <input type="password" name="password" placeholder="Password" required>
+                    <button type="submit">{{ page.title() }}</button>
+                </form>
+            {% endif %}
+            <a href="{{ url_for('start') }}" class="nav-link">Back to Start Page</a>
+
+        {% elif page == 'homepage' %}
+            <h2>Dashboard</h2>
+            <form action="{{ url_for('calculate') }}" method="POST">
+                <div id="course-container">
+                    <div class="course-row" style="font-size: 10px; color:#94a3b8; text-align: left;">
+                        <span>Course Name</span><span>Grade</span><span>Credits</span><span></span>
+                    </div>
+                    
+                    {% if current_courses %}
+                        {% for course in current_courses %}
+                        <div class="course-row">
+                            <input name="c_name" value="{{ course.name }}" placeholder="Course Name">
+                            <input type="number" step="0.01" min="0" max="4" name="grade" value="{{ course.grade }}" placeholder="0.0" required>
+                            <input type="number" step="1" name="credit" value="{{ course.credit }}" placeholder="0" required>
+                            {% if loop.index0 == 0 %}<span></span>{% else %}
+                            <button type="button" class="delete-btn" onclick="this.parentElement.remove()">×</button>{% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="course-row">
+                            <input name="c_name" placeholder="Course Name">
+                            <input type="number" step="0.01" min="0" max="4" name="grade" placeholder="0.0" required>
+                            <input type="number" step="1" name="credit" placeholder="0" required>
+                            <span></span>
+                        </div>
+                    {% endif %}
+                </div>
+                <button type="button" class="add-btn" onclick="addCourse()">+ Add Another Course</button>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" style="flex: 2;">Update GPA</button>
+                    <button type="button" onclick="window.location.href='/clear'" style="flex: 1; background: #4b5563;">Clear</button>
+                </div>
+            </form>
+
+            {% if gpa is not none %}
+                <div style="margin-top:20px;">
+                    <div class="{{ 'at-risk' if status == 'AT RISK' else 'safe' }}">{{ status }}</div>
+                    <div style="font-size: 2.5rem; font-weight: 800;">{{ gpa }}</div>
+                    <div class="progress-bg"><div class="progress-fill" style="width: {{ progress }}%;"></div></div>
+                </div>
+                <button onclick="toggleHistory()" style="background:#4b5563; font-size:12px; padding:8px;">View History</button>
+                <div id="history" class="history-panel">
+                    <h4 style="margin:0 0 10px 0; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom:5px;">History</h4>
+                    {% for item in history %}
+                        <div style="font-size:11px; margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:4px;">
+                            <span style="font-weight:bold; color:var(--success);">GPA: {{ item.gpa }}</span> 
+                            <span style="float:right; color:#94a3b8;">{{ item.datetime }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <a href="{{ url_for('logout') }}" class="nav-link" style="color:var(--danger);">Logout and Exit System</a>
+        {% endif %}
+    </div>
+
+    <script>
+        function addCourse() {
+            const container = document.getElementById('course-container');
+            const newRow = document.createElement('div');
+            newRow.className = 'course-row';
+            newRow.innerHTML = `
+                <input name="c_name" placeholder="Course Name">
+                <input type="number" step="0.01" min="0" max="4" name="grade" placeholder="0.0" required>
+                <input type="number" step="1" name="credit" placeholder="0" required>
+                <button type="button" class="delete-btn" onclick="this.parentElement.remove()">×</button>`;
+            container.appendChild(newRow);
+        }
+        function toggleHistory() {
+            var x = document.getElementById("history");
+            x.style.display = (x.style.display === "block") ? "none" : "block";
+        }
+    </script>
+</body>
+</html>
